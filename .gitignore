@@ -1,0 +1,32 @@
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+
+.vs/
+.vscode/
+*.csproj
+*.sln
+*.user
+*.pidb
+*.booproj
+*.svd
+*.pdb
+*.mdb
+*.opendb
+*.VC.db
+
+# Unity generated
+*.apk
+*.aab
+*.unitypackage
+
+# Temporary / local ScriptableObject data
+Assets/Databases/
+Assets/*_SOs/
+Assets/Resources/Define
+Assets/Fonts/
+Assets/Sprites
