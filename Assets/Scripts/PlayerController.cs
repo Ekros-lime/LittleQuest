@@ -1,6 +1,7 @@
 using UnityEngine;
 using shortRPG.config;
 using System.Collections;
+using shortRPG.Foe;
 
 namespace shortRPG.GameMain
 {
@@ -12,6 +13,7 @@ namespace shortRPG.GameMain
             public string Description;
             public float Speed;
             public float DodgeSpeed;
+            public int Damage;
         }
 
         private Character m_Character;
@@ -83,7 +85,26 @@ namespace shortRPG.GameMain
             }
 
             Input.GetKeyDown(GameConfig.InteractiveKey);
-            Input.GetMouseButtonDown(0);
+
+            if (Input.GetMouseButtonDown(0))
+            {
+                Collider2D[] Foes = Physics2D.OverlapCircleAll(new Vector2(this.transform.position.x, this.transform.position.y), 1, LayerMask.GetMask("Foe"));
+                Vector3 mousePosScreen = Input.mousePosition;
+                Vector3 mouseP = Camera.main.ScreenToWorldPoint(mousePosScreen);
+                Vector2 mousePos = new Vector2(mouseP.x, mouseP.y);
+
+                Vector2 AtkDir = mousePos - new Vector2(this.transform.position.x, this.transform.position.y);
+
+                foreach (var foe in Foes)
+                {
+                    Vector2 dir = foe.gameObject.transform.position - this.transform.position;
+                    if (Vector2.Angle(AtkDir, dir) <= 22.5f)
+                    {
+                        foe.gameObject.GetComponent<FoeController>().TakeDamage(m_Character.Damage);
+                    }
+                }
+            }
+
             Input.GetMouseButtonDown(1);
         }
 
@@ -106,6 +127,7 @@ namespace shortRPG.GameMain
             this.m_Character.DodgeSpeed = 5;
             this.m_Character.Name = "TestChara";
             this.m_Character.Description = "This is a Test Chara";
+            this.m_Character.Damage = 1;
 
             this.c_speed = m_Character.Speed;
         }
