@@ -436,7 +436,7 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 3
+  m_RootOrder: 4
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!61 &622505029
 BoxCollider2D:
@@ -608,6 +608,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b744bb25d0bfab4d8ec372271a99da4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  Player: {fileID: 270814076}
 --- !u!1 &966929467
 GameObject:
   m_ObjectHideFlags: 0
@@ -640,6 +641,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7b744bb25d0bfab4d8ec372271a99da4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  Player: {fileID: 270814076}
 --- !u!50 &966929469
 Rigidbody2D:
   serializedVersion: 4
@@ -750,5 +752,5 @@ Transform:
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 4
+  m_RootOrder: 3
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
