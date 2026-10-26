@@ -1,4 +1,6 @@
 using shortRPG.config;
+using shortRPG.GameMain;
+using System.Collections;
 using System.Security.Cryptography;
 using UnityEngine;
 
@@ -10,7 +12,18 @@ namespace shortRPG.Foe
         private int MaxHp;
         private int CurHp;
         private bool isLive = true;
-        private bool isTracking = false;
+        private int Attack = 1;
+        // private bool isTracking = false;
+
+        private FoeState state = FoeState.Idle;
+
+        public enum FoeState
+        {
+            Idle,
+            Tracking,
+            AtkPre,
+            Attacking
+        };
 
         //Temp
         public GameObject Player;
@@ -22,12 +35,19 @@ namespace shortRPG.Foe
 
         private void Update()
         {
-            TrackPlayer();
+            CheckState();
         }
 
         private void FixedUpdate()
         {
-            if (isTracking)
+            if (this.state == FoeState.AtkPre)
+            {
+                this.state = FoeState.Attacking;
+                StartCoroutine(Atk());
+
+            }
+
+            if (this.state == FoeState.Tracking)
             {
                 MoveToPlayer();
             }
@@ -56,28 +76,55 @@ namespace shortRPG.Foe
             Destroy(this.gameObject);
         }
 
-        private void TrackPlayer()
+        // 检查转换到其他状态
+        private void CheckState()
         {
-            if (!isTracking)
+            float dist = DistToPlayer();
+            if (this.state == FoeState.Idle)
             {
-                Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 2, LayerMask.GetMask("Player"));
-                if (playCol != null)
+                //Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 2, LayerMask.GetMask("Player"));
+                //if (playCol != null)
+                //{
+                //    this.state = FoeState.Tracking;
+                //    return;
+                //}
+                if (dist <= 0.5f)
                 {
-                    isTracking = true;
-                }
-            }
-            else
-            {
-                Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 4, LayerMask.GetMask("Player"));
-                if (playCol == null)
-                {
-                    isTracking = false;
-
-                    // temp velocity = 0, future, go back or ??
                     this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+                    this.state = FoeState.AtkPre;
+                    return;
+                }
+                else if (dist <= 2)
+                {
+                    this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+                    this.state = FoeState.Tracking;
+                    return;
                 }
             }
+            else if (state == FoeState.Tracking)
+            {
+                //Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 4, LayerMask.GetMask("Player"));
+                //if (playCol == null)
+                //{
+                //    this.state = FoeState.Idle;
 
+                //    // temp velocity = 0, future, go back or ??
+                //    this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+                //    return;
+                //}
+                if (dist <= 0.5f)
+                {
+                    this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+                    this.state = FoeState.AtkPre;
+                    return;
+                }
+                else if (dist > 4f)
+                {
+                    this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+                    this.state = FoeState.Idle;
+                    return;
+                }
+            }
         }
 
         private void MoveToPlayer()
@@ -97,6 +144,29 @@ namespace shortRPG.Foe
                 new Vector2(this.transform.position.x, this.transform.position.y);
 
             return vector.magnitude;
+        }
+
+        IEnumerator Timer(float time)
+        {
+            while (time >= 0)
+            {
+                time -= Time.deltaTime;
+                yield return null;
+            }
+        }
+        IEnumerator Atk()
+        {
+            this.state = FoeState.Attacking;
+            yield return StartCoroutine(Timer(0.8f));
+            Collider2D player = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 0.8f, LayerMask.GetMask("Player"));
+            if (player != null)
+            {
+                player.gameObject.GetComponent<PlayerController>().TakeDamage(this.Attack);
+                Debug.Log($"{player.gameObject.name} Take {this.Attack} dmg !");
+            }
+            
+            yield return StartCoroutine(Timer(0.2f));
+            this.state = FoeState.Tracking;
         }
 
         // sim init

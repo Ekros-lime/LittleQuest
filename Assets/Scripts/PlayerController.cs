@@ -2,6 +2,8 @@ using UnityEngine;
 using shortRPG.config;
 using System.Collections;
 using shortRPG.Foe;
+using System.ComponentModel;
+using JetBrains.Annotations;
 
 namespace shortRPG.GameMain
 {
@@ -20,6 +22,8 @@ namespace shortRPG.GameMain
         private bool isDodge = false;
         private float c_speed;
         private Vector3 moveDir;
+        private bool isLive = true;
+        private int CurHp;
 
         private void Awake()
         {
@@ -81,7 +85,7 @@ namespace shortRPG.GameMain
                     // this.transform.position += GameConfig.DodgeDist * Vector3.Normalize(this.moveDir);
                     this.moveDir = Vector3.left;
                 }
-                StartCoroutine(Timer(100));
+                StartCoroutine(Timer(1.5f));
             }
 
             Input.GetKeyDown(GameConfig.InteractiveKey);
@@ -108,15 +112,30 @@ namespace shortRPG.GameMain
             Input.GetMouseButtonDown(1);
         }
 
-        IEnumerator Timer(int time)
+        IEnumerator Timer(float time)
         {
             while (time >= 0)
             {
-                time -= 1;
+                time -= Time.deltaTime;
                 yield return null;
             }
             this.c_speed = m_Character.Speed;
             this.isDodge = false;
+        }
+
+        public void TakeDamage(int dmg)
+        {
+            if (!isLive) return;
+            if (dmg <= 0) return;
+
+            CurHp -= dmg;
+            Debug.Log($"{this.gameObject.name} take damage {dmg}");
+
+            if (CurHp <= 0 && isLive)
+            {
+                // Die();
+                Debug.Log($"Hp: {CurHp}");
+            }
         }
 
         // sim init a character
@@ -129,6 +148,7 @@ namespace shortRPG.GameMain
             this.m_Character.Description = "This is a Test Chara";
             this.m_Character.Damage = 1;
 
+            this.CurHp = 5;
             this.c_speed = m_Character.Speed;
         }
     }
