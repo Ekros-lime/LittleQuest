@@ -4,6 +4,7 @@ using System.Collections;
 using shortRPG.Foe;
 using System.ComponentModel;
 using JetBrains.Annotations;
+using System;
 
 namespace shortRPG.GameMain
 {
@@ -22,10 +23,12 @@ namespace shortRPG.GameMain
         private bool isDodge = false;
         private float c_speed;
         private Vector3 moveDir;
-        private bool isLive = true;
+        public bool isLive = true;
         private int CurHp;
 
-        private void Awake()
+        public Action interactive;
+
+        private void Start()
         {
             TestInit();
         }
@@ -85,10 +88,13 @@ namespace shortRPG.GameMain
                     // this.transform.position += GameConfig.DodgeDist * Vector3.Normalize(this.moveDir);
                     this.moveDir = Vector3.left;
                 }
-                StartCoroutine(Timer(1.5f));
+                StartCoroutine(Timer(0.2f));
             }
 
-            Input.GetKeyDown(GameConfig.InteractiveKey);
+            if (Input.GetKeyDown(GameConfig.InteractiveKey))
+            {
+                this.interactive?.Invoke();
+            }
 
             if (Input.GetMouseButtonDown(0))
             {
@@ -133,9 +139,15 @@ namespace shortRPG.GameMain
 
             if (CurHp <= 0 && isLive)
             {
-                // Die();
+                Die();
                 Debug.Log($"Hp: {CurHp}");
             }
+        }
+
+        public void Die()
+        {
+            // TODO: 暂时用这个先通信
+            this.isLive = false;
         }
 
         // sim init a character
@@ -143,7 +155,7 @@ namespace shortRPG.GameMain
         {
             this.m_Character = new Character();
             this.m_Character.Speed = 1;
-            this.m_Character.DodgeSpeed = 5;
+            this.m_Character.DodgeSpeed = 3;
             this.m_Character.Name = "TestChara";
             this.m_Character.Description = "This is a Test Chara";
             this.m_Character.Damage = 1;

@@ -28,7 +28,7 @@ namespace shortRPG.Foe
         //Temp
         public GameObject Player;
 
-        private void Awake()
+        private void Start()
         {
             Init();
         }
@@ -175,6 +175,8 @@ namespace shortRPG.Foe
             Speed = 0.6f;
             MaxHp = 5;
             CurHp = MaxHp;
+
+            this.Player = GameObject.FindGameObjectWithTag("Player");
         }
     }
 }
