@@ -13,6 +13,12 @@ namespace shortRPG.Foe
         private int CurHp;
         private bool isLive = true;
         private int Attack = 1;
+        private float attackStartDistance = 0.5f;
+        private float attackRange = 0.8f;
+        private float attackPreparationTime = 0.8f;
+        private float attackRecoveryTime = 0.2f;
+        private bool showAttackRange;
+
         // private bool isTracking = false;
 
         private FoeState state = FoeState.Idle;
@@ -27,6 +33,55 @@ namespace shortRPG.Foe
 
         //Temp
         public GameObject Player;
+
+        private void OnDrawGizmos()
+        {
+            DrawMoveDirection();
+            DrawAttackRange();
+        }
+
+        #region Draw Debug
+        private void DrawMoveDirection()
+        {
+            if (!Application.isPlaying) return;
+            Rigidbody2D body = GetComponent<Rigidbody2D>();
+            if (body == null || body.velocity.sqrMagnitude < 0.0001f) return;
+
+            Vector3 direction = new Vector3(body.velocity.x, body.velocity.y, 0f).normalized;
+            Vector3 origin = transform.position;
+            Vector3 tip = origin + direction;
+            Vector3 side = new Vector3(-direction.y, direction.x, 0f);
+            Color previousColor = Gizmos.color;
+            Gizmos.color = Color.yellow;
+            Gizmos.DrawLine(origin, tip);
+            Gizmos.DrawLine(tip, tip - direction * 0.2f + side * 0.1f);
+            Gizmos.DrawLine(tip, tip - direction * 0.2f - side * 0.1f);
+            Gizmos.color = previousColor;
+        }
+
+        private void DrawAttackRange()
+        {
+            if (!Application.isPlaying || !isLive || !showAttackRange) return;
+            Color previousColor = Gizmos.color;
+            Gizmos.color = Color.red;
+            const int segments = 48;
+            Vector3 origin = transform.position;
+            Vector3 previous = origin + Vector3.right * attackRange;
+            for (int i = 1; i <= segments; i++)
+            {
+                float angle = 2f * Mathf.PI * i / segments;
+                Vector3 point = origin + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * attackRange;
+                Gizmos.DrawLine(previous, point);
+                previous = point;
+            }
+            Gizmos.color = previousColor;
+        }
+        #endregion
+
+        private void OnDisable()
+        {
+            showAttackRange = false;
+        }
 
         private void Start()
         {
@@ -82,13 +137,7 @@ namespace shortRPG.Foe
             float dist = DistToPlayer();
             if (this.state == FoeState.Idle)
             {
-                //Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 2, LayerMask.GetMask("Player"));
-                //if (playCol != null)
-                //{
-                //    this.state = FoeState.Tracking;
-                //    return;
-                //}
-                if (dist <= 0.5f)
+                if (dist <= attackStartDistance)
                 {
                     this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
                     this.state = FoeState.AtkPre;
@@ -103,16 +152,7 @@ namespace shortRPG.Foe
             }
             else if (state == FoeState.Tracking)
             {
-                //Collider2D playCol = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 4, LayerMask.GetMask("Player"));
-                //if (playCol == null)
-                //{
-                //    this.state = FoeState.Idle;
-
-                //    // temp velocity = 0, future, go back or ??
-                //    this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
-                //    return;
-                //}
-                if (dist <= 0.5f)
+                if (dist <= attackStartDistance)
                 {
                     this.gameObject.GetComponent<Rigidbody2D>().velocity = Vector2.zero;
                     this.state = FoeState.AtkPre;
@@ -157,15 +197,20 @@ namespace shortRPG.Foe
         IEnumerator Atk()
         {
             this.state = FoeState.Attacking;
-            yield return StartCoroutine(Timer(0.8f));
-            Collider2D player = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), 0.8f, LayerMask.GetMask("Player"));
+            showAttackRange = true;
+            yield return StartCoroutine(Timer(attackPreparationTime));
+            Collider2D player = Physics2D.OverlapCircle(new Vector2(this.transform.position.x, this.transform.position.y), attackRange, LayerMask.GetMask("PlayerHitBox"));
             if (player != null)
             {
                 player.gameObject.GetComponent<PlayerController>().TakeDamage(this.Attack);
+                if (this == null) yield break;
+                if (!gameObject.activeInHierarchy) yield break;
+                if (!isLive) yield break;
                 Debug.Log($"{player.gameObject.name} Take {this.Attack} dmg !");
             }
             
-            yield return StartCoroutine(Timer(0.2f));
+            showAttackRange = false;
+            yield return StartCoroutine(Timer(attackRecoveryTime));
             this.state = FoeState.Tracking;
         }
 

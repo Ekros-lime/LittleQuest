@@ -21,13 +21,73 @@ namespace shortRPG.GameMain
 
         private Character m_Character;
         private bool isDodge = false;
+        private bool isAttacking = false;
         private float c_speed;
         private Vector3 moveDir;
         public bool isLive = true;
         private int CurHp;
+        private float attackRange = 1f;
+        private float attackAngle = 45f;
+        private float attackDisplayDuration = 0.2f;
+        private float attackDisplayUntil;
+        private Vector3 attackOrigin;
+        private Vector2 attackDirection;
+
+
+        public delegate void Handler();
+        public event Handler DieHandler;
 
         public Action interactive;
 
+        private void OnDrawGizmos()
+        {
+            DrawMoveDirection();
+            DrawAttackRange();
+        }
+
+        #region Draw Debug
+        private void DrawMoveDirection()
+        {
+            if (!Application.isPlaying) return;
+            Rigidbody2D body = GetComponent<Rigidbody2D>();
+            if (body == null || body.velocity.sqrMagnitude < 0.0001f) return;
+
+            Vector3 direction = new Vector3(body.velocity.x, body.velocity.y, 0f).normalized;
+            Vector3 origin = transform.position;
+            Vector3 tip = origin + direction;
+            Vector3 side = new Vector3(-direction.y, direction.x, 0f);
+            Color previousColor = Gizmos.color;
+            Gizmos.color = Color.cyan;
+            Gizmos.DrawLine(origin, tip);
+            Gizmos.DrawLine(tip, tip - direction * 0.2f + side * 0.1f);
+            Gizmos.DrawLine(tip, tip - direction * 0.2f - side * 0.1f);
+            Gizmos.color = previousColor;
+        }
+
+        private void DrawAttackRange()
+        {
+            if (!Application.isPlaying || !isLive || Time.time >= attackDisplayUntil) return;
+            if (attackDirection.sqrMagnitude < 0.0001f) return;
+
+            Color previousColor = Gizmos.color;
+            Gizmos.color = Color.red;
+            float startAngle = Mathf.Atan2(attackDirection.y, attackDirection.x) * Mathf.Rad2Deg
+                - attackAngle * 0.5f;
+            const int segments = 24;
+            Vector3 previous = attackOrigin;
+            for (int i = 0; i <= segments; i++)
+            {
+                float angle = (startAngle + attackAngle * i / segments) * Mathf.Deg2Rad;
+                Vector3 point = attackOrigin + new Vector3(Mathf.Cos(angle), Mathf.Sin(angle), 0f) * attackRange;
+                Gizmos.DrawLine(previous, point);
+                previous = point;
+            }
+            Gizmos.DrawLine(previous, attackOrigin);
+            Gizmos.color = previousColor;
+        }
+        #endregion
+
+        #region mono
         private void Start()
         {
             TestInit();
@@ -35,7 +95,7 @@ namespace shortRPG.GameMain
 
         private void Update()
         {
-            if (!isDodge)
+            if (!isDodge && !isAttacking)
             {
                 GetInput();
             }
@@ -45,6 +105,7 @@ namespace shortRPG.GameMain
         {
             Move();
         }
+        #endregion
 
         private void Move()
         {
@@ -81,14 +142,10 @@ namespace shortRPG.GameMain
 
             if (Input.GetKeyDown(GameConfig.DodgeKey))
             {
-                isDodge = true;
-                this.c_speed = m_Character.DodgeSpeed;
-                if (this.moveDir == Vector3.zero)
+                if (!isDodge)
                 {
-                    // this.transform.position += GameConfig.DodgeDist * Vector3.Normalize(this.moveDir);
-                    this.moveDir = Vector3.left;
+                    StartCoroutine(Dodge());
                 }
-                StartCoroutine(Timer(0.2f));
             }
 
             if (Input.GetKeyDown(GameConfig.InteractiveKey))
@@ -98,24 +155,61 @@ namespace shortRPG.GameMain
 
             if (Input.GetMouseButtonDown(0))
             {
-                Collider2D[] Foes = Physics2D.OverlapCircleAll(new Vector2(this.transform.position.x, this.transform.position.y), 1, LayerMask.GetMask("Foe"));
-                Vector3 mousePosScreen = Input.mousePosition;
-                Vector3 mouseP = Camera.main.ScreenToWorldPoint(mousePosScreen);
-                Vector2 mousePos = new Vector2(mouseP.x, mouseP.y);
-
-                Vector2 AtkDir = mousePos - new Vector2(this.transform.position.x, this.transform.position.y);
-
-                foreach (var foe in Foes)
+                if (!isAttacking)
                 {
-                    Vector2 dir = foe.gameObject.transform.position - this.transform.position;
-                    if (Vector2.Angle(AtkDir, dir) <= 22.5f)
-                    {
-                        foe.gameObject.GetComponent<FoeController>().TakeDamage(m_Character.Damage);
-                    }
+                    StartCoroutine(Atk());
                 }
             }
 
             Input.GetMouseButtonDown(1);
+        }
+
+        IEnumerator Atk()
+        {
+            isAttacking = true;
+
+            moveDir = Vector3.zero;
+            GetComponent<Rigidbody2D>().velocity = Vector2.zero;
+
+            Collider2D[] Foes = Physics2D.OverlapCircleAll(new Vector2(this.transform.position.x, this.transform.position.y), attackRange, LayerMask.GetMask("FoeHitBox"));
+            Vector3 mousePosScreen = Input.mousePosition;
+            Vector3 mouseP = Camera.main.ScreenToWorldPoint(mousePosScreen);
+            Vector2 mousePos = new Vector2(mouseP.x, mouseP.y);
+
+            Vector2 AtkDir = mousePos - new Vector2(this.transform.position.x, this.transform.position.y);
+
+            attackOrigin = transform.position;
+            attackDirection = AtkDir.normalized;
+            attackDisplayUntil = Time.time + attackDisplayDuration;
+
+            foreach (var foe in Foes)
+            {
+                Vector2 dir = foe.gameObject.transform.position - this.transform.position;
+                if (Vector2.Angle(AtkDir, dir) <= attackAngle * 0.5f)
+                {
+                    foe.gameObject.GetComponent<FoeController>().TakeDamage(m_Character.Damage);
+                }
+            }
+
+            yield return StartCoroutine(Timer(0.2f));
+
+            isAttacking = false;
+        }
+
+        IEnumerator Dodge()
+        {
+            isDodge = true;
+            this.c_speed = m_Character.DodgeSpeed;
+            if (this.moveDir == Vector3.zero)
+            {
+                // this.transform.position += GameConfig.DodgeDist * Vector3.Normalize(this.moveDir);
+                this.moveDir = Vector3.left;
+            }
+
+            yield return StartCoroutine(Timer(0.2f));
+
+            this.c_speed = m_Character.Speed;
+            this.isDodge = false;
         }
 
         IEnumerator Timer(float time)
@@ -125,8 +219,6 @@ namespace shortRPG.GameMain
                 time -= Time.deltaTime;
                 yield return null;
             }
-            this.c_speed = m_Character.Speed;
-            this.isDodge = false;
         }
 
         public void TakeDamage(int dmg)
@@ -144,10 +236,16 @@ namespace shortRPG.GameMain
             }
         }
 
+        protected virtual void OnDead()
+        {
+            DieHandler?.Invoke();
+        }
+
         public void Die()
         {
             // TODO: 暂时用这个先通信
             this.isLive = false;
+            OnDead();
         }
 
         // sim init a character
