@@ -9,10 +9,16 @@ namespace shortRPG
         public List<GameObject> Maps;
         private Dictionary<string, GameObject> _mapDict;
         public GameObject PlayerPrefab;
+        [SerializeField] private shortRPG.UI.UIManager uiManager;
+        private readonly Dictionary<string, Sprite> itemSprites = new Dictionary<string, Sprite>();
 
         private GameObject Player;
 
         private GameObject curMap;
+        private readonly HashSet<string> pickedItemIDs = new HashSet<string>();
+        private readonly HashSet<string> inventoryItemIDs = new HashSet<string>();
+        private readonly Dictionary<string, HashSet<int>> completedMapQuests =
+            new Dictionary<string, HashSet<int>>();
 
         private void Awake()
         {
@@ -21,51 +27,99 @@ namespace shortRPG
 
         private void Update()
         {
-
+            HandleInteraction(InteractiveType.auto);
         }
 
-        private void TransMap()
+        public event System.Action<string> ItemInteracted;
+
+        public event System.Action<QuestInteractive> QuestInteracted;
+
+        private void HandleInteraction()
+        {
+            HandleInteraction(InteractiveType.manual);
+        }
+
+        private void HandleInteraction(InteractiveType triggerType)
         {
             if (Player == null || curMap == null) return;
-            var currentMap = curMap.GetComponent<shortRPG.Map.Map>();
-            if (currentMap == null || currentMap.ExitEntries == null) return;
-
-            Vector2 localPosition = Player.transform.position - curMap.transform.position;
-            foreach (var exit in currentMap.ExitEntries)
+            if (!Player.GetComponent<PlayerController>().isLive) return;
+            var map = curMap.GetComponent<shortRPG.Map.Map>();
+            if (map == null) return;
+            Interactivable selected = map.FindInteraction(Player.transform.position, triggerType);
+            if (selected is ExitInteractive exit)
             {
-                Vector2 offset = localPosition - exit.Position;
-                if (Mathf.Abs(offset.x) > exit.Width / 2f ||
-                    Mathf.Abs(offset.y) > exit.Height / 2f) continue;
-
-                if (string.IsNullOrEmpty(exit.ExitID))
+                TransMap(exit);
+            }
+            else if (selected is ItemInteractive item)
+            {
+                var controller = Player.GetComponent<PlayerController>();
+                if (controller == null || string.IsNullOrEmpty(item.ItemID)) return;
+                controller.PickUp(item.ItemID);
+                pickedItemIDs.Add(item.ItemID);
+                inventoryItemIDs.Add(item.ItemID);
+                map.RemovePickedItem(item);
+                map.FilterPickedItems(pickedItemIDs);
+                if (uiManager != null && itemSprites.TryGetValue(item.ItemID, out Sprite sprite))
+                    uiManager.ShowItem(item.ItemID, sprite);
+                Debug.Log($"Picked up item: {item.ItemID}");
+                ItemInteracted?.Invoke(item.ItemID);
+            }
+            else if (selected is QuestInteractive quest)
+            {
+                var controller = Player.GetComponent<PlayerController>();
+                if (!map.CanApplyEffects(quest)) return;
+                if (!controller.TryConsumeItems(quest.NeedItemID))
                 {
-                    Debug.LogWarning("The selected map exit has no ExitID.");
+                    Debug.Log("Quest interaction failed: missing required items.");
                     return;
                 }
-
-                if (string.IsNullOrEmpty(exit.TargetMapID) ||
-                    !_mapDict.TryGetValue(exit.TargetMapID, out GameObject targetPrefab))
+                if (quest.NeedItemID != null)
+                    foreach (string id in quest.NeedItemID)
+                    {
+                        inventoryItemIDs.Remove(id);
+                        if (uiManager != null) uiManager.RemoveItem(id);
+                    }
+                map.CompleteQuest(quest);
+                map.ApplyEffects(quest);
+                if (!completedMapQuests.TryGetValue(map.ID, out HashSet<int> completed))
                 {
-                    Debug.LogWarning($"Target map not found: {exit.TargetMapID}");
-                    return;
+                    completed = new HashSet<int>();
+                    completedMapQuests.Add(map.ID, completed);
                 }
+                completed.Add(map.Quests.IndexOf(quest));
+                Debug.Log("Quest interaction succeeded.");
+                QuestInteracted?.Invoke(quest);
+            }
+        }
 
-                var targetMap = targetPrefab.GetComponent<shortRPG.Map.Map>();
-                if (targetMap == null || targetMap.Entrances == null) return;
-                foreach (var entrance in targetMap.Entrances)
-                {
-                    if (entrance.FromExitID != exit.ExitID) continue;
-                    Vector2 position = entrance.Position;
-                    RemoveMap();
-                    LoadMap(targetPrefab);
-                    Vector3 spawn = curMap.transform.position + new Vector3(position.x, position.y, 0f);
-                    spawn.z = Player.transform.position.z;
-                    Player.transform.position = spawn;
-                    return;
-                }
-                Debug.LogWarning($"Map {exit.TargetMapID} has no entrance from exit {exit.ExitID}.");
+        private void TransMap(ExitInteractive exit)
+        {
+            if (Player == null || curMap == null) return;
+            if (string.IsNullOrEmpty(exit.ExitID))
+            {
+                Debug.LogWarning("The selected map exit has no ExitID.");
                 return;
             }
+            if (string.IsNullOrEmpty(exit.TargetMapID) ||
+                !_mapDict.TryGetValue(exit.TargetMapID, out GameObject targetPrefab) || targetPrefab == null)
+            {
+                Debug.LogWarning($"Target map not found: {exit.TargetMapID}");
+                return;
+            }
+            var targetMap = targetPrefab.GetComponent<shortRPG.Map.Map>();
+            if (targetMap == null || targetMap.Entrances == null) return;
+            foreach (var entrance in targetMap.Entrances)
+            {
+                if (entrance.FromExitID != exit.ExitID) continue;
+                Vector2 position = entrance.Position;
+                RemoveMap();
+                LoadMap(targetPrefab);
+                Vector3 spawn = curMap.transform.position + new Vector3(position.x, position.y, 0f);
+                spawn.z = Player.transform.position.z;
+                Player.transform.position = spawn;
+                return;
+            }
+            Debug.LogWarning($"Map {exit.TargetMapID} has no entrance from exit {exit.ExitID}.");
         }
 
         public void LoadMap(GameObject map)
@@ -73,6 +127,13 @@ namespace shortRPG
             this.curMap = Instantiate(map);
             curMap.SetActive(true);
             curMap.transform.position = Vector3.zero;
+            var mapData = curMap.GetComponent<shortRPG.Map.Map>();
+            if (mapData != null)
+            {
+                mapData.FilterPickedItems(pickedItemIDs);
+                if (completedMapQuests.TryGetValue(mapData.ID, out HashSet<int> completed))
+                    mapData.RestoreCompletedQuests(completed);
+            }
         }
 
         public void RemoveMap()
@@ -89,12 +150,30 @@ namespace shortRPG
 
         private void Init()
         {
+            if (uiManager == null) uiManager = FindObjectOfType<shortRPG.UI.UIManager>();
+            itemSprites.Clear();
             this._mapDict = new Dictionary<string, GameObject>();
             if (this.Maps != null)
             {
                 foreach (var map in this.Maps)
                 {
-                    this._mapDict[map.GetComponent<shortRPG.Map.Map>().ID] = map;
+                    if (map == null) continue;
+                    var mapData = map.GetComponent<shortRPG.Map.Map>();
+                    if (mapData == null) continue;
+                    this._mapDict[mapData.ID] = map;
+                    if (mapData.Items == null) continue;
+                    foreach (var item in mapData.Items)
+                    {
+                        if (item == null || string.IsNullOrEmpty(item.ItemID)) continue;
+                        if (itemSprites.TryGetValue(item.ItemID, out Sprite existing) &&
+                            existing != null && item.sprite != null && existing != item.sprite)
+                        {
+                            Debug.LogWarning($"Different sprites configured for item: {item.ItemID}");
+                            continue;
+                        }
+                        if (!itemSprites.ContainsKey(item.ItemID) || existing == null)
+                            itemSprites[item.ItemID] = item.sprite;
+                    }
                 }
             }
 
@@ -114,14 +193,23 @@ namespace shortRPG
             this.Player = Instantiate(this.PlayerPrefab);
             this.Player.transform.position = Vector3.zero;
 
+            var controller = Player.GetComponent<PlayerController>();
+            foreach (string itemID in inventoryItemIDs)
+                controller.PickUp(itemID);
             SubscribePlayerEvents();
 
         }
 
         public void SubscribePlayerEvents()
         {
-            Player.GetComponent<PlayerController>().interactive += TransMap;
+            Player.GetComponent<PlayerController>().interactive += HandleInteraction;
             Player.GetComponent<PlayerController>().DieHandler += HandlePlayerDie;
+            Player.GetComponent<PlayerController>().HpChanged += HandleHpChanged;
+        }
+
+        private void HandleHpChanged(int hp)
+        {
+            if (uiManager != null) uiManager.ShowHp(hp);
         }
 
         private void HandlePlayerDie()
@@ -131,7 +219,9 @@ namespace shortRPG
 
         private void RemovePlayer()
         {
-            Player.GetComponent<PlayerController>().interactive -= TransMap;
+            Player.GetComponent<PlayerController>().interactive -= HandleInteraction;
+            Player.GetComponent<PlayerController>().DieHandler -= HandlePlayerDie;
+            Player.GetComponent<PlayerController>().HpChanged -= HandleHpChanged;
             Destroy(Player);
         }
 

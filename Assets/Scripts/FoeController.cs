@@ -206,7 +206,7 @@ namespace shortRPG.Foe
                 if (this == null) yield break;
                 if (!gameObject.activeInHierarchy) yield break;
                 if (!isLive) yield break;
-                Debug.Log($"{player.gameObject.name} Take {this.Attack} dmg !");
+                // Debug.Log($"{player.gameObject.name} Take {this.Attack} dmg !");
             }
             
             showAttackRange = false;

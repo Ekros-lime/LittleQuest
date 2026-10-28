@@ -2,9 +2,8 @@ using UnityEngine;
 using shortRPG.config;
 using System.Collections;
 using shortRPG.Foe;
-using System.ComponentModel;
-using JetBrains.Annotations;
 using System;
+using System.Collections.Generic;
 
 namespace shortRPG.GameMain
 {
@@ -33,9 +32,12 @@ namespace shortRPG.GameMain
         private Vector3 attackOrigin;
         private Vector2 attackDirection;
 
+        private List<string> Inventry = new List<string>();
+
 
         public delegate void Handler();
         public event Handler DieHandler;
+        public event Action<int> HpChanged;
 
         public Action interactive;
 
@@ -106,6 +108,31 @@ namespace shortRPG.GameMain
             Move();
         }
         #endregion
+
+        public bool PickUp(string id)
+        {
+            if (string.IsNullOrEmpty(id) || Inventry.Contains(id)) return false;
+            Inventry.Add(id);
+            return true;
+        }
+
+        public bool TryConsumeItems(List<string> requiredIDs)
+        {
+            if (requiredIDs == null) return true;
+            var required = new HashSet<string>(requiredIDs);
+            foreach (string id in required)
+                if (string.IsNullOrEmpty(id) || !Inventry.Contains(id)) return false;
+            foreach (string id in required) RemoveItem(id);
+            return true;
+        }
+
+        private void RemoveItem(string id)
+        {
+            if (this.Inventry.Contains(id))
+            {
+                this.Inventry.Remove(id);
+            }
+        }
 
         private void Move()
         {
@@ -226,7 +253,8 @@ namespace shortRPG.GameMain
             if (!isLive) return;
             if (dmg <= 0) return;
 
-            CurHp -= dmg;
+            CurHp = Mathf.Max(0, CurHp - dmg);
+            HpChanged?.Invoke(CurHp);
             Debug.Log($"{this.gameObject.name} take damage {dmg}");
 
             if (CurHp <= 0 && isLive)
@@ -259,8 +287,8 @@ namespace shortRPG.GameMain
             this.m_Character.Damage = 1;
 
             this.CurHp = 5;
+            HpChanged?.Invoke(CurHp);
             this.c_speed = m_Character.Speed;
         }
     }
 }
-
